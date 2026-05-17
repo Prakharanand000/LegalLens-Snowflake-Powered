@@ -3,10 +3,13 @@
 > AI-powered Snowflake-native analytics for Legal Operations teams.
 > Built with Snowflake Cortex, dbt, Airflow, and Streamlit.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-FF4B4B?logo=streamlit)](https://legallens-app-powered.streamlit.app/)
 ![Stack](https://img.shields.io/badge/Snowflake-Cortex-29B5E8?logo=snowflake)
 ![dbt](https://img.shields.io/badge/dbt-Core-FF694B?logo=dbt)
 ![Airflow](https://img.shields.io/badge/Airflow-2.x-017CEE?logo=apacheairflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-FF4B4B?logo=streamlit)
+
+**[🚀 Live Demo → https://legallens-app-powered.streamlit.app/](https://legallens-app-powered.streamlit.app/)**
 
 ---
 

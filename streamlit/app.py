@@ -52,6 +52,28 @@ st.markdown("""
 
     html, body, [class*="css"] {
         font-family: 'DM Sans', sans-serif;
+        font-size: 16px;
+    }
+
+    /* Larger base text throughout */
+    p, li, span, div, label {
+        font-size: 1rem;
+    }
+
+    /* Tab labels bigger */
+    button[data-baseweb="tab"] {
+        font-size: 1.05rem !important;
+        font-weight: 500 !important;
+    }
+
+    /* Dataframe text */
+    .stDataFrame td, .stDataFrame th {
+        font-size: 0.95rem !important;
+    }
+
+    /* Multiselect tags */
+    span[data-baseweb="tag"] {
+        font-size: 0.9rem !important;
     }
 
     /* Header */
@@ -107,10 +129,36 @@ st.markdown("""
         border-left: 4px solid #6366f1;
         border-radius: 0 8px 8px 0;
         padding: 18px 22px;
-        font-size: 0.97rem;
+        font-size: 1rem;
         color: #1e293b;
         line-height: 1.65;
         margin-top: 12px;
+    }
+
+    /* Tab summary insight box */
+    .summary-box {
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-left: 4px solid #0284c7;
+        border-radius: 0 8px 8px 0;
+        padding: 14px 20px;
+        margin: 12px 0 20px 0;
+        font-size: 1rem;
+        color: #0c4a6e;
+        line-height: 1.7;
+    }
+    .summary-box strong {
+        color: #0369a1;
+        font-weight: 600;
+    }
+    .summary-box.warn {
+        background: #fff7ed;
+        border-color: #fed7aa;
+        border-left-color: #ea580c;
+        color: #7c2d12;
+    }
+    .summary-box.warn strong {
+        color: #c2410c;
     }
 
     /* Sidebar */
@@ -279,7 +327,19 @@ with tab1:
                   delta_color="inverse")
         k4.metric("Disputed Amount",    fmt_currency(disputed))
 
-        st.markdown("---")
+        # Summary insight
+        top_firm = spend_df.loc[spend_df["TOTAL_SPEND"].idxmax(), "VENDOR"] if not spend_df.empty else "N/A"
+        over_pct = round(100 * over_budget / len(spend_df), 0) if len(spend_df) > 0 else 0
+        box_class = "summary-box warn" if over_budget > 3 else "summary-box"
+        st.markdown(f"""
+        <div class="{box_class}">
+            <strong>📊 Spend Summary:</strong> Total outside counsel spend is <strong>{fmt_currency(total_spend)}</strong>
+            against a budget of <strong>{fmt_currency(total_budget)}</strong>.
+            <strong>{over_budget} firm(s) ({int(over_pct)}%)</strong> are over budget.
+            Highest spend firm: <strong>{top_firm}</strong>.
+            Disputed invoices total <strong>{fmt_currency(disputed)}</strong> and require review.
+        </div>
+        """, unsafe_allow_html=True)
         col_left, col_right = st.columns([3, 2])
 
         with col_left:
@@ -405,6 +465,22 @@ with tab2:
         k4.metric("Flagged Stale",         int(backlog_df["FLAG_STALE"].sum()),
                   delta_color="inverse")
 
+        # Summary insight
+        busiest_area = backlog_df.groupby("PRACTICE_AREA")["ACTIVE_MATTER_COUNT"].sum().idxmax() if not backlog_df.empty else "N/A"
+        busiest_atty = backlog_df.groupby("LEAD_ATTORNEY")["WORKLOAD_SCORE"].sum().idxmax() if not backlog_df.empty else "N/A"
+        stale_count  = int(backlog_df["FLAG_STALE"].sum())
+        avg_age      = int(backlog_df["AVG_DAYS_OPEN"].mean()) if not backlog_df.empty else 0
+        box_class    = "summary-box warn" if stale_count > 5 else "summary-box"
+        st.markdown(f"""
+        <div class="{box_class}">
+            <strong>📋 Backlog Summary:</strong> <strong>{int(backlog_df["ACTIVE_MATTER_COUNT"].sum())} active matters</strong>
+            with an average age of <strong>{avg_age} days</strong>.
+            Busiest practice area: <strong>{busiest_area}</strong>.
+            Most loaded attorney: <strong>{busiest_atty}</strong>.
+            <strong>{stale_count} matter(s)</strong> flagged as stale (open &gt; 270 days) — recommend partner review.
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown("---")
         col_l, col_r = st.columns([2, 3])
 
@@ -519,6 +595,22 @@ with tab3:
         k2.metric("Expiring 30-60 Days", expiring_60,  delta_color="inverse")
         k3.metric("Flagged for GC Review", int(flagged_gc), delta_color="inverse")
         k4.metric("No Renewal Signal",   no_renewal,   delta_color="inverse")
+
+        # Summary insight
+        critical_firms = contracts_df[contracts_df["EXPIRY_RISK"] == "Critical (< 30 days)"]["VENDOR"].unique().tolist()
+        neg_sentiment  = contracts_df[contracts_df["FLAG_FOR_GC_REVIEW"] == True]["VENDOR"].unique().tolist()
+        critical_str   = ", ".join(critical_firms[:3]) + (" +more" if len(critical_firms) > 3 else "") if critical_firms else "None"
+        neg_str        = ", ".join(neg_sentiment[:3]) + (" +more" if len(neg_sentiment) > 3 else "") if neg_sentiment else "None"
+        box_class      = "summary-box warn" if expiring_30 > 0 else "summary-box"
+        st.markdown(f"""
+        <div class="{box_class}">
+            <strong>📄 Contract Risk Summary:</strong>
+            <strong>{expiring_30} contract(s)</strong> expiring in &lt;30 days — firms: <strong>{critical_str}</strong>.
+            <strong>{expiring_60}</strong> more expiring in 30–60 days.
+            <strong>{int(flagged_gc)} contract(s)</strong> flagged for GC review based on negative Cortex sentiment — firms: <strong>{neg_str}</strong>.
+            <strong>{no_renewal}</strong> active contracts have no renewal signal.
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("---")
         col_l, col_r = st.columns([2, 3])
