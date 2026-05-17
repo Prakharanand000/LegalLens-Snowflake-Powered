@@ -41,7 +41,7 @@ st.set_page_config(
     page_title="LegalLens",
     page_icon="⚖️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ── Custom CSS ────────────────────────────────────────────────────────────────
@@ -79,17 +79,18 @@ st.markdown("""
     /* Header */
     .main-title {
         font-family: 'DM Serif Display', serif;
-        font-size: 2.4rem;
+        font-size: 3.2rem;
         color: #0f1923;
-        letter-spacing: -0.5px;
+        letter-spacing: -1px;
         margin-bottom: 0;
+        line-height: 1.1;
     }
     .main-subtitle {
         font-family: 'DM Sans', sans-serif;
-        font-size: 0.95rem;
+        font-size: 1.05rem;
         color: #6b7280;
         font-weight: 300;
-        margin-top: 2px;
+        margin-top: 4px;
     }
 
     /* KPI cards */
@@ -161,12 +162,31 @@ st.markdown("""
         color: #c2410c;
     }
 
-    /* Sidebar */
+    /* Hide empty sidebar */
     section[data-testid="stSidebar"] {
-        background: #0f1923;
+        display: none;
     }
-    section[data-testid="stSidebar"] * {
-        color: #e5e7eb !important;
+    .main .block-container {
+        max-width: 1200px;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+    }
+    .filter-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #9ca3af;
+        margin-bottom: 8px;
     }
 
     div[data-testid="stMetricValue"] {
@@ -250,13 +270,13 @@ with col_title:
 st.markdown("<hr style='border:none;border-top:1px solid #e5e7eb;margin:10px 0 20px 0'>", unsafe_allow_html=True)
 
 
-# ── Sidebar filters ───────────────────────────────────────────────────────────
+# ── Connection + Sidebar filters ──────────────────────────────
+
+conn = get_connection()
 
 with st.sidebar:
     st.markdown("### ⚙️ Filters")
     st.markdown("---")
-
-    conn = get_connection()
 
     practice_areas = query(conn, "SELECT DISTINCT practice_area FROM LEGALLENS_DB.STAGING_MARTS.fct_outside_counsel_spend ORDER BY 1")["PRACTICE_AREA"].tolist()
     selected_areas = st.multiselect("Practice Area", options=practice_areas, default=practice_areas)
@@ -271,7 +291,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        "<div style='font-size:0.72rem;color:#6b7280;line-height:1.5'>"
+        "<div style='font-size:0.72rem;color:#9ca3af;line-height:1.5'>"
         "Access governed by Snowflake row-level security policies. "
         "Sensitive billing data restricted to authorized practice areas only."
         "</div>",
@@ -697,7 +717,7 @@ with tab3:
 with tab4:
     st.markdown("#### 🤖 Ask LegalLens — AI-Powered Q&A on Your Legal Operations Data")
     st.caption(
-        "Powered by Snowflake Cortex COMPLETE (mistral-large). "
+        "Powered by Snowflake Cortex COMPLETE (llama3.1-8b). "
         "Ask questions in plain English — LegalLens pulls live data from Snowflake and answers with grounded facts."
     )
 
@@ -708,103 +728,80 @@ with tab4:
         "Who are the most overloaded attorneys right now?",
         "Which firms have negative contract sentiment scores?",
         "How does M&A spend compare to Litigation spend?",
-        "Flag any outside counsel where both spend and sentiment are negative signals.",
     ]
+
+    # Use session state to persist question across reruns
+    if "legallens_question" not in st.session_state:
+        st.session_state.legallens_question = ""
 
     st.markdown("**Try an example:**")
     cols = st.columns(3)
-    prefill = ""
-    for i, q in enumerate(EXAMPLE_QUESTIONS[:6]):
+    for i, q in enumerate(EXAMPLE_QUESTIONS):
         if cols[i % 3].button(q, key=f"eg_{i}", use_container_width=True):
-            prefill = q
+            st.session_state.legallens_question = q
+            st.session_state.legallens_input = q
 
     user_question = st.text_input(
         "Your question:",
-        value=prefill,
         placeholder="Which firms are over budget across all practice areas?",
+        key="legallens_input",
     )
+    if user_question:
+        st.session_state.legallens_question = user_question
 
-    if st.button("Ask LegalLens ⚡", type="primary") and user_question:
-        with st.spinner("Querying Snowflake Cortex..."):
+    if st.button("Ask LegalLens ⚡", type="primary"):
+        q = st.session_state.legallens_question
+        if not q:
+            st.warning("Please type a question or click an example above.")
+        else:
+            st.info(f"Asking: {q}")
+            with st.spinner("Querying Snowflake Cortex..."):
+                try:
+                    cur = conn.cursor()
 
-            # Pull relevant context from the mart tables
-            context_spend = query(conn, """
-                SELECT vendor, practice_area, total_spend, total_budget,
-                       budget_status, pct_invoices_over_budget, disputed_amount,
-                       matter_count, avg_spend_per_matter
-                FROM LEGALLENS_DB.STAGING_MARTS.fct_outside_counsel_spend
-                ORDER BY total_spend DESC
-                LIMIT 50
-            """).to_string(index=False)
+                    cur.execute("""
+                        SELECT vendor, practice_area, total_spend, total_budget,
+                               budget_status, matter_count
+                        FROM LEGALLENS_DB.STAGING_MARTS.fct_outside_counsel_spend
+                        ORDER BY total_spend DESC LIMIT 15
+                    """)
+                    spend_rows = cur.fetchall()
+                    context_spend = "VENDOR | PRACTICE | SPEND | BUDGET | STATUS\n" + "\n".join(str(r) for r in spend_rows)
 
-            context_backlog = query(conn, """
-                SELECT practice_area, lead_attorney, active_matter_count,
-                       avg_days_open, matters_over_1yr, workload_score, flag_stale
-                FROM LEGALLENS_DB.STAGING_MARTS.fct_matter_backlog
-                WHERE is_active = TRUE OR status = 'Open'
-                ORDER BY workload_score DESC
-                LIMIT 30
-            """).to_string(index=False)
+                    cur.execute("""
+                        SELECT practice_area, lead_attorney, active_matter_count,
+                               avg_days_open, workload_score
+                        FROM LEGALLENS_DB.STAGING_MARTS.fct_matter_backlog
+                        ORDER BY workload_score DESC LIMIT 15
+                    """)
+                    backlog_rows = cur.fetchall()
+                    context_backlog = "PRACTICE | ATTORNEY | ACTIVE | AVG_DAYS | SCORE\n" + "\n".join(str(r) for r in backlog_rows)
 
-            context_contracts = query(conn, """
-                SELECT vendor, practice_area, end_date, days_until_expiry,
-                       expiry_risk, renewal_flag, notes_sentiment_score, flag_for_gc_review
-                FROM LEGALLENS_DB.STAGING_STAGING.stg_contracts
-                ORDER BY days_until_expiry ASC
-                LIMIT 30
-            """).to_string(index=False)
+                    cur.execute("""
+                        SELECT vendor, expiry_risk, days_until_expiry, renewal_flag, notes_sentiment_score
+                        FROM LEGALLENS_DB.STAGING_STAGING.stg_contracts
+                        ORDER BY days_until_expiry ASC LIMIT 15
+                    """)
+                    contract_rows = cur.fetchall()
+                    context_contracts = "VENDOR | RISK | DAYS | RENEWAL | SENTIMENT\n" + "\n".join(str(r) for r in contract_rows)
 
-            # Build the prompt
-            prompt = textwrap.dedent(f"""
-                You are LegalLens, an AI analyst embedded in a Legal Operations intelligence platform.
-                You have access to real-time data from Snowflake about outside counsel spend,
-                matter backlogs, and contract risk.
+                    prompt = (
+                        "You are LegalLens, a legal ops AI analyst. "
+                        "Answer using ONLY the data below. Be specific. Use bullet points.\n\n"
+                        f"SPEND:\n{context_spend}\n\nBACKLOG:\n{context_backlog}\n\nCONTRACTS:\n{context_contracts}\n\nQUESTION: {q}\n\nANSWER:"
+                    )
 
-                Answer the user's question using ONLY the data provided below.
-                Be specific with numbers. If a firm or attorney is flagged, say why.
-                Format your answer clearly with bullet points where appropriate.
-                Do not make up data that is not in the context.
+                    safe_prompt = prompt.replace("'", "''").replace("\\", "").replace("\n", " ").replace("\r", " ")[:8000]
+                    cur.execute(f"SELECT SNOWFLAKE.CORTEX.COMPLETE('llama3.1-8b', '{safe_prompt}') AS answer")
+                    row = cur.fetchone()
+                    cur.close()
 
-                === OUTSIDE COUNSEL SPEND DATA ===
-                {context_spend}
+                    answer = row[0] if row else "No response returned."
+                    st.markdown(f'<div class="cortex-answer">{answer}</div>', unsafe_allow_html=True)
+                    st.caption("⚠️ Answers are grounded in your Snowflake data but should be reviewed before acting on.")
 
-                === MATTER BACKLOG DATA ===
-                {context_backlog}
-
-                === CONTRACT RISK DATA ===
-                {context_contracts}
-
-                === USER QUESTION ===
-                {user_question}
-
-                === YOUR ANSWER ===
-            """).strip()
-
-            # Call Snowflake Cortex COMPLETE
-            # Use parameterised cursor to avoid escaping issues with apostrophes in data
-            cortex_sql = """
-                SELECT SNOWFLAKE.CORTEX.COMPLETE(
-                    'mistral-large',
-                    %s
-                ) AS answer
-            """
-
-            try:
-                cur = conn.cursor()
-                cur.execute(cortex_sql, (prompt,))
-                answer = cur.fetchone()[0]
-                cur.close()
-                st.markdown(
-                    f'<div class="cortex-answer">{answer}</div>',
-                    unsafe_allow_html=True,
-                )
-                st.caption("⚠️ LegalLens answers are grounded in your Snowflake data but should be reviewed before acting on.")
-            except Exception as e:
-                st.error(f"Cortex query failed: {e}")
-                st.info(
-                    "Make sure your Snowflake region supports Cortex COMPLETE "
-                    "and that the LEGALLENS_WH warehouse is running."
-                )
+                except Exception as e:
+                    st.error(f"ERROR: {type(e).__name__}: {e}")
 
     st.markdown("---")
     with st.expander("🔒 Data Access & Security Architecture"):
