@@ -1,0 +1,28 @@
+# Credentials — NEVER commit these
+.env
+.env.svc
+streamlit/.streamlit/secrets.toml
+dbt_project/profiles.yml
+
+# Generated files
+*.csv
+__pycache__/
+*.pyc
+*.pyo
+
+# dbt build artifacts
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+
+# Junk from zip extraction
+{data_generator,dbt_project
+
+# OS
+.DS_Store
+Thumbs.db

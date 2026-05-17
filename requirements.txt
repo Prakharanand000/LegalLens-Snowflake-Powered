@@ -1,0 +1,11 @@
+# LegalLens — Python dependencies
+# Fixed for Python 3.13 / Windows (no C compiler needed — all pre-built wheels)
+
+snowflake-connector-python[pandas]
+dbt-snowflake
+faker
+pandas
+streamlit
+plotly
+python-dotenv
+pyarrow

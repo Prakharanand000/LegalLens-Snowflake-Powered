@@ -1,0 +1,117 @@
+# models/staging/sources.yml
+# Declares raw source tables and applies data quality tests.
+
+version: 2
+
+sources:
+  - name: raw
+    database: LEGALLENS_DB
+    schema: RAW
+    tables:
+      - name: MATTERS
+        description: "Raw matter records loaded from the data generator."
+        columns:
+          - name: MATTER_ID
+            description: "Unique matter identifier."
+            tests:
+              - unique
+              - not_null
+          - name: PRACTICE_AREA
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ["M&A", "Litigation", "IP", "Employment", "Regulatory", "Real Estate", "Tax"]
+          - name: STATUS
+            tests:
+              - accepted_values:
+                  values: ["Open", "Closed", "On Hold", "In Review"]
+          - name: OPEN_DATE
+            tests:
+              - not_null
+
+      - name: INVOICES
+        description: "Raw invoice records — one row per invoice against a matter."
+        columns:
+          - name: INVOICE_ID
+            tests:
+              - unique
+              - not_null
+          - name: MATTER_ID
+            tests:
+              - not_null
+          - name: AMOUNT
+            tests:
+              - not_null
+          - name: VENDOR
+            tests:
+              - not_null
+
+      - name: CONTRACTS
+        description: "Outside counsel engagement contracts."
+        columns:
+          - name: CONTRACT_ID
+            tests:
+              - unique
+              - not_null
+          - name: VENDOR
+            tests:
+              - not_null
+          - name: END_DATE
+            tests:
+              - not_null
+
+models:
+  - name: stg_matters
+    description: "Cleaned and typed matters staging view."
+    columns:
+      - name: matter_id
+        tests:
+          - unique
+          - not_null
+      - name: practice_area
+        tests:
+          - not_null
+      - name: days_open
+        tests:
+          - not_null
+
+  - name: stg_invoices
+    description: "Cleaned and enriched invoices staging view."
+    columns:
+      - name: invoice_id
+        tests:
+          - unique
+          - not_null
+      - name: amount
+        tests:
+          - not_null
+
+  - name: stg_contracts
+    description: "Contracts staging view with Cortex sentiment scores."
+    columns:
+      - name: contract_id
+        tests:
+          - unique
+          - not_null
+      - name: notes_sentiment_score
+        description: "Snowflake Cortex SENTIMENT() score on contract notes. Range: -1.0 to 1.0."
+
+  - name: fct_outside_counsel_spend
+    description: >
+      Outside counsel spend vs. budget by vendor and practice area.
+      Powers the GC spend dashboard and Cortex natural language Q&A.
+    columns:
+      - name: vendor
+        tests:
+          - not_null
+      - name: budget_status
+        tests:
+          - accepted_values:
+              values: ["Over Budget", "At Risk", "On Track", "Under Budget"]
+
+  - name: fct_matter_backlog
+    description: "Matter backlog aggregated by practice area, attorney, and priority."
+    columns:
+      - name: practice_area
+        tests:
+          - not_null
