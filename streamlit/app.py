@@ -16,6 +16,7 @@ Setup:
 import os
 import platform
 import textwrap
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
 
 # ── Patch: fix Snowflake connector bug on Windows Microsoft Store Python ──────
 original_libc_ver = platform.libc_ver
@@ -200,13 +201,17 @@ st.markdown("""
 
 @st.cache_resource(show_spinner=False)
 def get_connection():
-    # Use Streamlit secrets when deployed, .env locally
+    def _load_key(pem_str):
+        return load_pem_private_key(
+            pem_str.encode(), password=None
+        ).private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+
     try:
         creds = st.secrets["snowflake"]
         return snowflake.connector.connect(
             account=creds["account"],
             user=creds["user"],
-            password=creds["password"],
+            private_key=_load_key(creds["private_key"]),
             warehouse=creds.get("warehouse", "LEGALLENS_WH"),
             database="LEGALLENS_DB",
             schema="STAGING_MARTS",
@@ -215,7 +220,7 @@ def get_connection():
         return snowflake.connector.connect(
             account=os.environ["SNOWFLAKE_ACCOUNT"],
             user=os.environ["SNOWFLAKE_USER"],
-            password=os.environ["SNOWFLAKE_PASSWORD"],
+            private_key=_load_key(os.environ["SNOWFLAKE_PRIVATE_KEY"]),
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "LEGALLENS_WH"),
             database="LEGALLENS_DB",
             schema="STAGING_MARTS",
